@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,7 +49,19 @@ public class WordService {
         );
 
         String normalizedQuery = normalize(q);
-        return wordRepository.search(normalizedQuery, level, pageable).map(this::toResponse);
+        Specification<Word> spec = (root, query, cb) -> cb.conjunction();
+        if (normalizedQuery != null) {
+            String likePattern = "%" + normalizedQuery.toLowerCase() + "%";
+            spec = spec.and((root, query, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("english")), likePattern),
+                    cb.like(cb.lower(root.get("turkish")), likePattern)
+            ));
+        }
+        if (level != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("level"), level));
+        }
+
+        return wordRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
