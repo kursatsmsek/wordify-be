@@ -74,4 +74,11 @@ public class WordController {
     ) {
         return wordService.getQuizWords(type, count);
     }
+
+    @GetMapping("/random")
+    public List<String> getRandomWords(
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) Integer count
+    ) {
+        return wordService.getRandomWords(count);
+    }
 }

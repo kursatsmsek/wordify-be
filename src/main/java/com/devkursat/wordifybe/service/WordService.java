@@ -94,17 +94,25 @@ public class WordService {
     public List<WordResponse> getQuizWords(QuizType type, Integer requestedCount) {
         int count = sanitizeCount(requestedCount);
         QuizType quizType = type == null ? QuizType.RANDOM : type;
+        Pageable pageable = PageRequest.of(0, count);
 
         List<Word> words = switch (quizType) {
             case LAST_WRONG -> {
-                List<Word> wrongWords = wordRepository.findByLastWrongAtIsNotNullOrderByLastWrongAtDesc(PageRequest.of(0, count));
-                yield wrongWords.isEmpty() ? wordRepository.findRandom(count) : wrongWords;
+                List<Word> wrongWords = wordRepository.findByLastWrongAtIsNotNullOrderByLastWrongAtDesc(pageable);
+                yield wrongWords.isEmpty() ? wordRepository.findRandom(pageable) : wrongWords;
             }
-            case RECENT -> wordRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, count));
-            case RANDOM -> wordRepository.findRandom(count);
+            case RECENT -> wordRepository.findAllByOrderByCreatedAtDesc(pageable);
+            case RANDOM -> wordRepository.findRandom(pageable);
         };
 
         return words.stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getRandomWords(Integer requestedCount) {
+        int count = sanitizeCount(requestedCount);
+        Pageable pageable = PageRequest.of(0, count);
+        return wordRepository.findRandomWords(pageable);
     }
 
     private String resolveSortField(String sortField) {
