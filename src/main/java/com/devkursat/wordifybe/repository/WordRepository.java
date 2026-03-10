@@ -19,4 +19,6 @@ public interface WordRepository extends JpaRepository<Word, Long>, JpaSpecificat
 
     @Query("SELECT w.english FROM Word w ORDER BY function('RANDOM')")
     List<String> findRandomWords(Pageable pageable);
+
+    List<Word> findByEnglishIn(List<String> englishWords);
 }
