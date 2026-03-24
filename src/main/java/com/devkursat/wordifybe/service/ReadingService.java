@@ -126,12 +126,12 @@ public class ReadingService {
     private Map<String, Object> buildPayload(List<String> sourceWords, String instruction) {
         String wordsText = String.join(", ", sourceWords);
         String userPrompt = """
-                Generate a B1-B2 level English reading passage using ALL of these vocabulary words: %s
-
+                Generate an IELTS-style B1-B2 level English reading passage using ALL of these vocabulary words: %s
+                
                 Return ONLY this JSON structure, nothing else:
                 {
-                  "title": "Short, clear title for the passage (max 8 words)",
-                  "passage_en": "1-2 paragraph passage that uses every vocabulary word at least once",
+                  "title": "Short, clear title (max 8 words)",
+                  "passage_en": "1-2 short paragraphs. Clear and natural tone (IELTS General style, not academic)"
                   "passage_tr": "Turkish translation of the passage",
                   "target_words": [
                     {"word": "<target_word_from_list>", "meaning_tr": "<turkish_meaning>"}
@@ -141,34 +141,58 @@ public class ReadingService {
                   ],
                   "questions": [
                     {
-                      "question": "Comprehension question about the passage",
+                      "question": "Question text",
                       "options": [
                         {"id": "A", "text": "Option text"},
                         {"id": "B", "text": "Option text"},
                         {"id": "C", "text": "Option text"},
-                        {"id": "D", "text": "Option text"}
+                        {"id": "D", "text": "Option text (omit for true_false_not_given)"}
                       ],
                       "answer": "A"
                     }
                   ]
                 }
-
+                
                 Rules:
-                - Use ALL %d vocabulary words in the passage
-                - title must summarize the passage topic clearly and be max 8 words
+                - Use ALL %d vocabulary words naturally in the passage
+                - Passage must be coherent and contextually meaningful (not forced usage)
+                - Use semi-academic IELTS-style tone (objective, informative)
                 - target_words must include all given vocabulary words
-                - extra_words must be 0 to 5 items
-                - extra_words must be selected from difficult words that appear in the passage
-                - extra_words must NOT duplicate any target_words item
-                - Do not always output the same extra word; choose based on the generated passage
-                - EXACTLY 5 questions
-                - Each question has EXACTLY 4 options (A, B, C, D)
+                - Select extra_words dynamically from passage difficulty
+                - Reading difficulty should match IELTS Band 5–6
+                - Include paraphrasing between passage and questions (do not copy sentences directly)
+                - For true_false_not_given questions, ensure at least one answer is NOT GIVEN (information not stated in passage)
+                - extra_words must be 0 to 10 items
+                - extra_words must NOT overlap with target_words
+                - extra_words must be carefully selected from the passage (NOT random or generic words)
+                - Prioritize words that are:
+                  - essential for understanding the passage meaning
+                  - relatively difficult (B2+ level)
+                  - mainly verbs and nouns (avoid basic adjectives/adverbs unless critical)
+                - Each extra word MUST appear in the passage exactly as written
+                - Do NOT include obvious or common words (e.g., make, go, good, thing, people)
+                - Do NOT include words just to fill the list; include ONLY if they are truly important for comprehension
+                - Prefer words that might block understanding if unknown
+                
+                Questions:
+                - EXACTLY 5 questions total
+                - Use MIXED question types:
+                  - At least 2 multiple_choice
+                  - At least 1 true_false_not_given
+                  - At least 1 sentence_completion
+                - Option counts:
+                  - 4 options (A-D) for multiple_choice and sentence_completion
+                  - 3 options (A-C) for true_false_not_given with labels: True, False, Not Given
+                - Each question must test comprehension, NOT vocabulary definition
+                - Distractors (wrong answers) must be plausible and close to correct answer
                 - Only ONE correct answer per question
+  
+                Output:
                 - Output ONLY the JSON object, nothing else
                 """.formatted(wordsText, sourceWords.size());
 
         if (instruction != null && !instruction.isBlank()) {
-            userPrompt = userPrompt + "\nAdditional instructions:\n- " + instruction.trim();
+            userPrompt = userPrompt + "\nAdditional instructions or passage topic:\n- " + instruction.trim();
         }
 
         return Map.of(
@@ -233,8 +257,9 @@ public class ReadingService {
             if (question == null || isBlank(question.question()) || isBlank(question.answer())) {
                 throw new AiServiceException("Each question must include non-empty question and answer");
             }
-            if (question.options() == null || question.options().size() != 4) {
-                throw new AiServiceException("Each question must have exactly 4 options");
+            int optionCount = question.options() == null ? 0 : question.options().size();
+            if (optionCount < 3 || optionCount > 4) {
+                throw new AiServiceException("Each question must have 3 to 4 options");
             }
 
             List<String> optionIds = question.options().stream()
@@ -254,8 +279,8 @@ public class ReadingService {
                     .distinct()
                     .count();
 
-            if (distinctOptionCount != 4) {
-                throw new AiServiceException("Each question must have 4 distinct option ids");
+            if (distinctOptionCount != optionCount) {
+                throw new AiServiceException("Each question must have distinct option ids");
             }
 
             String normalizedAnswer = question.answer().trim().toUpperCase();
